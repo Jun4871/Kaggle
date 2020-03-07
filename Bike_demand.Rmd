@@ -1,0 +1,70 @@
+---
+title: "bike_demand"
+author: "Ryu"
+date: '2020 3 7 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 라이브러리 활성화
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(caret)
+library(readr)
+library(gridExtra)
+library(xgboost)
+library(Metrics)
+```
+
+# 데이터 셋
+
+```{r}
+# train_set 및 test_set 할당
+train_set <-read.csv("train.csv")
+test_set <- read.csv("test.csv")
+SampleSubmission <- read.csv("sampleSubmission.csv")
+```
+
+# 탐색적 데이터 분석
+
+```{r}
+str(train_set) 
+summary(train_set)
+sum(is.na(train_set))
+
+str(test_set)
+summary(test_set)
+sum(is.na(test_set))
+```
+
+# 트레인 셋 가공
+
+```{r}
+train_set <- train_set %>% 
+  select(-casual, -registered) %>% 
+  mutate(
+    year = year(datetime),
+    month = month(datetime),
+    hour = hour(datetime),
+    minute = minute(datetime)) %>% 
+  mutate(group = sample(
+    c("train", "vailid"),
+    size = nrow(train_set),
+    replace = TRUE,
+    prob = c(0.7, 0.3)
+  ))
+
+
+train_set_2 <- train_set
+
+train_set$season <- as.factor(train_set$season)
+levels(train_set$season) <- c("Spring", "Summer", "Fall", "Winter")
+train_set$season
+```
+
