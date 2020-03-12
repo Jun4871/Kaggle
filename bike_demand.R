@@ -46,11 +46,15 @@ train_set <- train_set %>%
 
 train_set_2 <- train_set
 
+# Season 컬럼 팩터화
 train_set$season <- as.factor(train_set$season)
+
+# 계절별로 레벨 구분
 levels(train_set$season) <- c("Spring", "Summer", "Fall", "Winter")
 train_set$season
 
 
+# Test set에 컬럼 생성(year, month, hour, minute)
 test_set <- test_set %>% 
   mutate(
     year = year(datetime),
@@ -58,61 +62,22 @@ test_set <- test_set %>%
     hour = hour(datetime),
     minute = minute(datetime))
 
-# vailied_set <- train_set %>% 
-#   filter(group == "valid")
-# 
-# train_set <- train_set %>% 
-#   filter(group == "train")
-
 dim(train_set)
 
 
-# # remove casual registered
-# train_set <- train_set %>% 
-#   select(-casual, -registered) %>%  
-#   mutate(
-#     year = year(datetime),
-#     month = month(datetime),
-#     hour = hour(datetime),
-#     minute = minute(datetime)) %>% 
-#   mutate(group = sample(
-#     c("train", "valid"),
-#     size = nrow(train_set),
-#     replace = TRUE,
-#     prob = c(0.7, 0.3) # Set weights for each group here
-#   ))
-# 
-# train_set_2 <- train_set
-# 
-# train_set$season <- as.factor(train_set$season)
-# levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
-
-# test_set <- test_set %>% 
-#   mutate(
-#     year = year(datetime),
-#     month = month(datetime),
-#     hour = hour(datetime),
-#     minute = minute(datetime))
-# 
-# valid_set <- train_set %>% 
-#   filter(group == "valid")
-# 
-# 
-# train_set <- train_set %>% 
-#   filter(group == "train")
-
 str(train_set)
 
+# Test Set의 각 벡터 조회
 colnames(train_set)
 
 
 head(train_set)
 
-
+# 시각화 
 aa <- ggplot(data = train_set, aes(temp,count)) +
   geom_point(alpha=.2,aes(color=temp)) +
   ggtitle("Count vs Temperature") + xlab("Temp (Celsius)") +
-  ylab("Rental Count") + labs(color='Temp(C)') +
+  ylab("Rental Count") + labs(color='Temp(C)') + #레이블 생성
   theme_bw() +  
   theme(legend.position = "bottom")
 

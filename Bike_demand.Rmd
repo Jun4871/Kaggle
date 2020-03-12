@@ -6,12 +6,19 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,  warning = FALSE, fig.width=10, fig.height = 8)
 ```
+
+# 개요
+
+캐글의 자전거 수요량 데이터를 사용하여 Training Data 와 Test Data 로 나누어 수요량을 예측해보고자 한다.  
+
 
 # 라이브러리 활성화
 
+필요한 라이브러리 활성화
 ```{r}
+library(ggplot2)
 library(tidyverse)
 library(lubridate)
 library(stringr)
@@ -24,6 +31,7 @@ library(Metrics)
 
 # 데이터 셋
 
+
 ```{r}
 # train_set 및 test_set 할당
 train_set <-read.csv("train.csv")
@@ -33,6 +41,7 @@ SampleSubmission <- read.csv("sampleSubmission.csv")
 
 # 탐색적 데이터 분석
 
+
 ```{r}
 str(train_set) 
 summary(train_set)
@@ -41,6 +50,8 @@ sum(is.na(train_set))
 str(test_set)
 summary(test_set)
 sum(is.na(test_set))
+
+
 ```
 
 # 트레인 셋 가공
@@ -52,19 +63,79 @@ train_set <- train_set %>%
     year = year(datetime),
     month = month(datetime),
     hour = hour(datetime),
-    minute = minute(datetime)) %>% 
-  mutate(group = sample(
-    c("train", "vailid"),
-    size = nrow(train_set),
-    replace = TRUE,
-    prob = c(0.7, 0.3)
-  ))
+    wday = wday(datetime))
 
 
-train_set_2 <- train_set
+test_set <- test_set %>% 
+  mutate(
+    year = year(datetime),
+    month = month(datetime),
+    hour = hour(datetime),
+    wday = wday(datetime))
+```
 
-train_set$season <- as.factor(train_set$season)
-levels(train_set$season) <- c("Spring", "Summer", "Fall", "Winter")
-train_set$season
+# 자료형 파악
+
+```{r}
+str(train_set)
+summary(train_set)
+sum(is.na(train_set))
+```
+
+## 시각화 
+```{r}
+train_set_vis <- train_set
+
+
+train_set_vis$season  <- factor(train_set_vis$season, labels = c("Spring", "Summer", "Fall", "Winter"))
+train_set_vis$weather <- factor(train_set_vis$weather, labels = c("Good", "Normal", "Bad", "Very Bad"))
+train_set_vis$holiday <- factor(train_set_vis$holiday)
+train_set_vis$workingday <- factor(train_set_vis$workingday)
+train_set_vis$year <- factor(train_set_vis$year)
+train_set_vis$month <- factor(train_set_vis$month)
+train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","Wed","Thu","Fir","Sat"))
+```
+
+
+## 
+
+```{r}
+non_hour_list <- (colnames(train_set_vis) != "count") %>%
+  which()
+
+lst <- map(non_hour_list, function(i) {
+  df_list <- colnames(train_set_vis)[i]
+
+  train_set_vis %>%
+    select(df_list, count) %>%
+    rename(aa = df_list) %>%
+    ggplot(aes(aa,count)) +
+    geom_point(alpha=.2,color = "#008ABC") +
+    labs(title = paste0(df_list," vs count"), x = df_list, y = "",color=df_list) +
+    theme_bw() +
+    theme(legend.position = "bottom")
+})
+
+grid.arrange(grobs=lst, ncol=2)
+
+
+  # df_list <- colnames(train_set_vis)[1]
+  # 
+  # train_set_vis %>%
+  #   select(df_list, count) %>%
+  #   rename(aa = df_list) %>%
+  #   ggplot(aes(aa,count)) +
+  #   geom_point(alpha=.2,color = "#008ABC") +
+  #   labs(title = paste0(df_list," vs count"), x = df_list, y = "",color=df_list) +
+  #   theme_bw() +
+  #   theme(legend.position = "bottom")
+  # 
+  # 
+  #   train_set_vis %>%
+  #   ggplot(aes(year,count)) +
+  #   geom_point(alpha=.2,color = "#008ABC") +
+  #   labs(title = paste0(df_list," vs count"), x = df_list, y = "",color=df_list) +
+  #   theme_bw() +
+  #   theme(legend.position = "bottom")
 ```
 
