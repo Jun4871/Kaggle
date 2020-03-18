@@ -14,6 +14,11 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE,  warning = FALSE, fig.width=
 캐글의 자전거 수요량 데이터를 사용하여 Training Data 와 Test Data 로 나누어 수요량을 예측해보고자 한다.  
 
 
+<p align="center">
+$$ \sqrt{\frac{1}{n} \sum(\log(a_i + 1) - \log(a_i+1))2 } $$
+</p>
+
+
 # 라이브러리 활성화
 
 필요한 라이브러리 활성화
@@ -31,12 +36,12 @@ library(Metrics)
 
 # 데이터 셋
 
-
+예측을 위해서는 모델을 만들어야 하는데, 이 때 모델을 만들기 위한 데이터가 필요하다. 이것을 트레이닝 세트라고 하고, 또한 모델이 신규 데이터에 대해서도 정확한지 테스트할 데이터도 필요한데 이것을 테스트 세트라고 한다. 트레이닝 세트는 모델을 구축하는 알고리즘(회귀, 의사결정나무 등)에 사용할 데이터로, 알고리즘이 출력변수를 가장 잘 예측할 수 있는 올바른 인자를 설정하도록 한다. 테스트 세트는 모델의 결과가 정확한지 검증하는 결과를 만드는 데 필요하다. 
 ```{r}
 # train_set 및 test_set 할당
-train_set <-read.csv("train.csv")
-test_set <- read.csv("test.csv")
-SampleSubmission <- read.csv("sampleSubmission.csv")
+train_set <-read_csv("train.csv")
+test_set <- read_csv("test.csv")
+SampleSubmission <- read_csv("sampleSubmission.csv")
 ```
 
 # 탐색적 데이터 분석
@@ -56,6 +61,7 @@ sum(is.na(test_set))
 
 # 트레인 셋 가공
 
+모델링 전에 데이터를 가공하는 작업으로, 컬럼을 추가 또는 삭제하는 등 알맞게 데이터를 정제하는 과정이다.  
 ```{r}
 train_set <- train_set %>% 
   select(-casual, -registered) %>% 
@@ -82,7 +88,8 @@ summary(train_set)
 sum(is.na(train_set))
 ```
 
-## 시각화 
+# 시각화
+
 ```{r}
 train_set_vis <- train_set
 
@@ -97,7 +104,9 @@ train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","
 ```
 
 
-## 
+## 각 변수별 count와의 관계
+
+
 
 ```{r}
 non_hour_list <- (colnames(train_set_vis) != "count") %>%
@@ -137,5 +146,101 @@ grid.arrange(grobs=lst, ncol=2)
   #   labs(title = paste0(df_list," vs count"), x = df_list, y = "",color=df_list) +
   #   theme_bw() +
   #   theme(legend.position = "bottom")
+```
+
+
+## hour와 다른 변수들 간의 관계
+
+```{r}
+factor_list <- sapply(train_set_vis, is.factor) %>% 
+  which()
+
+
+lst <- lapply(factor_list, function(x) {
+  df_list <- colnames(train_set_vis)[x]
+  
+  train_set_vis %>% 
+    rename(aa = df_list) %>% 
+    group_by(aa, hour) %>% 
+    summarise(count = sum(count)) %>% 
+    ggplot(aes( x = hour, y = count, group = aa, colour = aa)) +
+    labs(title = paste0("count by ", df_list), color = df_list) +
+    theme_bw() +
+    geom_line()
+})
+
+
+
+
+
+grid.arrange(grobs=lst, ncol=2)
+
+
+```
+
+
+# XGboost
+
+## count to log & train/test set 분리 
+
+```{r}
+
+train_set$count <- log1p(train_set$count)
+
+x_train <- train_set %>% 
+  select(-count, -datetime) %>% 
+  as.matrix()
+
+y_train <- train_set$count 
+
+x_test <- test_set %>% 
+  select(-datetime) %>% 
+  as.matrix()
+
+
+
+```
+
+
+## gridsearch / cross validation
+
+```{r}
+d_train <- xgb.DMatrix(x_train, label = y_train)
+
+```
+
+## gridsearch / cross validation 결과
+
+```{r}
+
+```
+
+## xgboost 모델
+
+```{r}
+
+
+
+model <- xgb.train(
+  data = d_train, 
+  max_depth = 10,
+  nround = 150,
+  eta = 0.15,
+  subsample = 0.6,
+  colsample_bytree = 0.6,
+  min_child_wight = 1
+)
+
+xgb.importance(feature_names = colnames(x_train), model) %>% 
+  xgb.plot.importance()
+```
+
+```{r}
+pred <- predict(model, x_test) %>% 
+  expm1()
+
+
+solution = data.frame(datetime = test_set$datetime, count = pred)
+write.csv(solution, "solution.csv", row.names = FALSE)
 ```
 
