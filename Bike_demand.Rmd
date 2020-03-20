@@ -1,7 +1,7 @@
 ---
-title: "bike_demand"
+title: "(doing)자전거 대여 수요예측"
 author: "Ryu"
-date: '2020 3 7 '
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
@@ -9,9 +9,18 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, message = FALSE,  warning = FALSE, fig.width=10, fig.height = 8)
 ```
 
+<p align="center"><b>
+![](./bikes.png)
+</b><br>
+</p>
+
+<p align="center">
+  <b>Github Code: [Jun4871 Github](https://github.com/Jun4871/copy_with_R_book/blob/master/Klusterling.Rmd)</b><br>
+</p>
+
 # 개요
 
-캐글의 자전거 수요량 데이터를 사용하여 Training Data 와 Test Data 로 나누어 수요량을 예측해보고자 한다.  
+캐글의 자전거 수요량 데이터를 사용하여 Training Data 와 Test Data 로 나누어 수요량을 예측해보고자 한다. 평가는 RMSLE(Root Mean Square Logarithmic Error)로 하며 이는 RMSE에 각각 log를 씌운것으로 오차에 대해서 과대평가된 항목보다 과소평가된 항목에 패널티를 더 주게 된다. 식은 다음과 같다.
 
 
 <p align="center">
@@ -19,10 +28,12 @@ $$ \sqrt{\frac{1}{n} \sum(\log(a_i + 1) - \log(a_i+1))2 } $$
 </p>
 
 
+<br>
+
 # 라이브러리 활성화
 
-필요한 라이브러리 활성화
-```{r}
+데이터 분석에 필요한 라이브러리 활성화를 활성화 시켜주도록 한다. 사용할 라이브러리는 다음과 같다. 
+```{r  message=FALSE,  results = FALSE, fig.align="center"}
 library(ggplot2)
 library(tidyverse)
 library(lubridate)
@@ -34,24 +45,65 @@ library(xgboost)
 library(Metrics)
 ```
 
+<br>
+
 # 데이터 셋
 
-예측을 위해서는 모델을 만들어야 하는데, 이 때 모델을 만들기 위한 데이터가 필요하다. 이것을 트레이닝 세트라고 하고, 또한 모델이 신규 데이터에 대해서도 정확한지 테스트할 데이터도 필요한데 이것을 테스트 세트라고 한다. 트레이닝 세트는 모델을 구축하는 알고리즘(회귀, 의사결정나무 등)에 사용할 데이터로, 알고리즘이 출력변수를 가장 잘 예측할 수 있는 올바른 인자를 설정하도록 한다. 테스트 세트는 모델의 결과가 정확한지 검증하는 결과를 만드는 데 필요하다. 
-```{r}
+예측을 위해서는 모델을 만들어야 하는데, 이 때 모델을 만들기 위한 데이터가 필요하다. 이것을 트레이닝 세트라고 하고, 또한 모델이 신규 데이터에 대해서도 정확한지 테스트할 데이터도 필요한데 이것을 테스트 세트라고 한다. 트레이닝 세트는 모델을 구축하는 알고리즘(회귀, 의사결정나무 등)에 사용할 데이터로, 알고리즘이 출력변수를 가장 잘 예측할 수 있는 올바른 인자를 설정하도록 한다. 테스트 세트는 모델의 결과가 정확한지 검증하는 결과를 만드는 데 필요하다. read_csv() 함수를 사용하면 날짜형 데이터로 바로 변환이 된다. 
+```{r message=FALSE,  results = FALSE, fig.align="center"}
 # train_set 및 test_set 할당
 train_set <-read_csv("train.csv")
 test_set <- read_csv("test.csv")
 SampleSubmission <- read_csv("sampleSubmission.csv")
 ```
 
+<br>
+
 # 탐색적 데이터 분석
 
+Bike Sharing Demand 의 데이터는 다음과 같다. 이중에서 casual, registered는 test_set에 없어서 사용하지 않을 것이고, 날짜와 날씨 데이터로 이루어져 있다.
 
-```{r}
+
+- datetime: 년-월-일 시간 데이터
+
+- season: 1 = 봄, 2 = 여름, 3 = 가을, 4 = 겨울
+
+- holiday: 공휴일 또는 주말
+
+- workingday: 공휴일, 주말을 제외한 평일
+
+- weather
+
+  - 1: 매우 맑음(Clear, Few clouds, Partly cloudy, Partly cloudy)
+
+  - 2: 맑음(Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist)
+
+  - 3: 나쁨(Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds)
+
+  - 4: 매우 나쁨(Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog)
+
+ - temp: 기온
+
+ - atemp: 체감온도 정도로 보자
+
+ - humidity: 상대 습도
+
+ - windspeed: 바람의 세기
+
+ - casual: 미등록 사용자 렌탈 수
+
+ - registered: 등록된 사용자 렌탈수
+
+ - count: 렌탈한 총 합
+
+```{r message=FALSE,  results = FALSE, fig.align="center"}
+
+dim(train_set)
 str(train_set) 
 summary(train_set)
 sum(is.na(train_set))
 
+dim(test_set)
 str(test_set)
 summary(test_set)
 sum(is.na(test_set))
@@ -59,9 +111,11 @@ sum(is.na(test_set))
 
 ```
 
+<br>
+
 # 트레인 셋 가공
 
-모델링 전에 데이터를 가공하는 작업으로, 컬럼을 추가 또는 삭제하는 등 알맞게 데이터를 정제하는 과정이다.  
+모델링 전에 데이터를 가공하는 작업으로, 컬럼을 추가 또는 삭제하는 등 알맞게 데이터를 정제하는 과정이다. 데이터를 불러오고 전처리를 해주도록 하자. xgboost를 사용하기 위해선, 각각의 데이터는 모두 숫자형으로 표현 되어야 한다. 날짜 데이터는 년, 월, 시간, 요일로 따로 데이터를 불러 오도록 하자.
 ```{r}
 train_set <- train_set %>% 
   select(-casual, -registered) %>% 
@@ -80,19 +134,16 @@ test_set <- test_set %>%
     wday = wday(datetime))
 ```
 
-# 자료형 파악
-
-```{r}
-str(train_set)
-summary(train_set)
-sum(is.na(train_set))
-```
+<br>
 
 # 시각화
 
-```{r}
-train_set_vis <- train_set
+이렇게 데이터를 파악 해봤으니 이를 시각화 해보도록 하자. 시각화의 편의성을 위해서 숫자형 데이터는 모두 라벨링을 해주었다. 대신 train_set_vis라고 train_set를 따로 지정해주어 혼선이 없도록 해주었다.
 
+```{r}
+
+train_set_vis <- train_set
+dim(train_set_vis)
 
 train_set_vis$season  <- factor(train_set_vis$season, labels = c("Spring", "Summer", "Fall", "Winter"))
 train_set_vis$weather <- factor(train_set_vis$weather, labels = c("Good", "Normal", "Bad", "Very Bad"))
@@ -106,12 +157,18 @@ train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","
 
 ## 각 변수별 count와의 관계
 
+각각의 변수는 Count와 어떤 관계를 보이는가? 가장 먼저 데이터가 count에 어떤 영향을 끼치는지 파악해보도록 하자. hour변수가 눈에 띄게 count에 영향을 끼치는 것을 확인할 수 있었다. 방법론적으로는 ggplot 객체를 한꺼번에 불러와서 list화 시키는 방법을 택했다. 그리고 나서 grid.arrange() 함수를 사용하여 이를 한눈에 볼 수 있도록 시각화를 했다. 이번에 참고 해볼만한 구글 키워드를 소개 하겠다.
 
+참고: map in tydiverse (lapply 보다 빠르게 병렬 처리를 해줄수 있다.)
+참고: grid.arrange in r (ggplot을 grid화 시켜서 표현을 할 수 있다.)
 
 ```{r}
-non_hour_list <- (colnames(train_set_vis) != "count") %>%
-  which()
 
+# count 칼럼이 10번째인데 이것을 제외시켰음. which()를 사용하지 않았을 때는 논리연산으로 수행되어 TRUE FALSE 로 구분하고 FALSE 로 뜬다.
+non_hour_list <- (colnames(train_set_vis) != "count") %>% 
+  which()  
+
+# 병렬처리로 non_hour_list에 function을 적용한다. fuction은 첫번째, train_set_vis의 컬럼을 df_list에 
 lst <- map(non_hour_list, function(i) {
   df_list <- colnames(train_set_vis)[i]
 
@@ -151,6 +208,16 @@ grid.arrange(grobs=lst, ncol=2)
 
 ## hour와 다른 변수들 간의 관계
 
+위 그림에서 count에 가장 많은 영향을 끼친 변수로는 hour임을 알 수 있었다. 그럼 이번엔 hour이 다른 변수와 어떤 관계 인지 확인 해보도록 하자.
+
+- season: 의외로 Spring가 가장 낮은것을 확인 할수 있었다.
+- holiday: 0, 1 이 뚜렷하게 구분이 되어 있다. 그러나.. 좀 더 확인해볼 필요가 있어보인다.
+- workingday: 0,1 역시 뚜렷하게 구분 되어 있다.
+- weather: 정말 뚜렷하게 날씨별로 구분이 되는걸 볼 수 있다.
+- year: 2011년에 비해 2012년이 좀 더 많은걸 볼 수 있다.
+- month: 월별로 구분이 되지만 뚜렷하게 알 수 있는 방법은 없다.
+- wday: 요일별로 했을때 평일과 주말의 분포가 선명하게 보인다. 평일은 08시, 17시 (출퇴근시간), 주말은 12시에 뚜렷하게 솟아 오른걸 확인뿐만 아니라 이해를 할 수 있었다.
+
 ```{r}
 factor_list <- sapply(train_set_vis, is.factor) %>% 
   which()
@@ -178,11 +245,14 @@ grid.arrange(grobs=lst, ncol=2)
 
 ```
 
+<br>
 
 # XGboost
+이번엔 Xgboost를 사용하여 분석을 하기 위한 사전준비를 해주자. xgboost를 돌리기 위해선 데이터의 형식이 matrix형식이 되어야 한다.
 
 ## count to log & train/test set 분리 
 
+Count에 log를 취해주자. 이는 RMSLE를 위한 것으로 로그를 취한 값의 RMSE를 최소화 한 것이 RMSLE가 최소화가 되기 때문이다. 또 모델을 돌릴때 datetime는 년, 월, 시간, 요일로 나누어 주었으니 빼주도록 하자.
 ```{r}
 
 train_set$count <- log1p(train_set$count)
@@ -203,6 +273,8 @@ x_test <- test_set %>%
 
 
 ## gridsearch / cross validation
+
+Grid search와 Cross validation을 실행 해보자. xgboost를 돌리는데에 있어, 모델에 여러 조건을 넣어주기 위해 Grid search를 사용했고, 모델의 결과가 validataion에만 성능이 좋고, 실제 결과에는 성능이 좋지 않을지도 몰라 Cross validation을 해주도록 한다.(참고로 둘다 진행하는데 시간이 매우 오래 걸린다.) xgboost의 기술적인 설명은 다음 키워드를 참고하도록 하자
 
 ```{r}
 d_train <- xgb.DMatrix(x_train, label = y_train)
