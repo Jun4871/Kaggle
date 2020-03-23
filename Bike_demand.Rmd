@@ -1,5 +1,5 @@
 ---
-title: "(doing)자전거 대여 수요예측"
+title: "자전거 대여 수요예측"
 author: "Ryu"
 date: "`r Sys.Date()`"
 output: html_document
@@ -34,13 +34,13 @@ $$ \sqrt{\frac{1}{n} \sum(\log(a_i + 1) - \log(a_i+1))2 } $$
 
 데이터 분석에 필요한 라이브러리 활성화를 활성화 시켜주도록 한다. 사용할 라이브러리는 다음과 같다. 
 ```{r  message=FALSE,  results = FALSE, fig.align="center"}
-library(ggplot2)
-library(tidyverse)
-library(lubridate)
+library(ggplot2) # 시각화 
+library(tidyverse) # 전처리
+library(lubridate) # 날짜 
 library(stringr)
 library(caret)
-library(readr)
-library(gridExtra)
+library(readr) # 데이터 로딩
+library(gridExtra) # 차트 분할
 library(xgboost)
 library(Metrics)
 ```
@@ -152,12 +152,13 @@ train_set_vis$workingday <- factor(train_set_vis$workingday)
 train_set_vis$year <- factor(train_set_vis$year)
 train_set_vis$month <- factor(train_set_vis$month)
 train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","Wed","Thu","Fir","Sat"))
+
 ```
 
 
 ## 각 변수별 count와의 관계
 
-각각의 변수는 Count와 어떤 관계를 보이는가? 가장 먼저 데이터가 count에 어떤 영향을 끼치는지 파악해보도록 하자. hour변수가 눈에 띄게 count에 영향을 끼치는 것을 확인할 수 있었다. 방법론적으로는 ggplot 객체를 한꺼번에 불러와서 list화 시키는 방법을 택했다. 그리고 나서 grid.arrange() 함수를 사용하여 이를 한눈에 볼 수 있도록 시각화를 했다. 이번에 참고 해볼만한 구글 키워드를 소개 하겠다.
+다음 그림은 각 변수가 count에 어떤 관계를 보이는지 알려주고 있다. 분석을 하기전에 우리가 예측을 해야하는 것은 count이기 때문에 count를 기준으로 각 변수의 관계를 그렸으며, 한눈에 보기위해 grid 함수를 사용하였다. 자세한 내용은 다음 참고를 보자. 
 
 참고: map in tydiverse (lapply 보다 빠르게 병렬 처리를 해줄수 있다.)
 참고: grid.arrange in r (ggplot을 grid화 시켜서 표현을 할 수 있다.)
@@ -165,7 +166,7 @@ train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","
 ```{r}
 
 # count 칼럼이 10번째인데 이것을 제외시켰음. which()를 사용하지 않았을 때는 논리연산으로 수행되어 TRUE FALSE 로 구분하고 FALSE 로 뜬다.
-non_hour_list <- (colnames(train_set_vis) != "count") %>% 
+non_hour_list <- (colnames(train_set_vis) != "count") %>% # which() 를 사용해 "count"인 인덱스를 제외.
   which()  
 
 # 병렬처리로 non_hour_list에 function을 적용한다. fuction은 첫번째, train_set_vis의 컬럼을 df_list에 
@@ -208,15 +209,15 @@ grid.arrange(grobs=lst, ncol=2)
 
 ## hour와 다른 변수들 간의 관계
 
-위 그림에서 count에 가장 많은 영향을 끼친 변수로는 hour임을 알 수 있었다. 그럼 이번엔 hour이 다른 변수와 어떤 관계 인지 확인 해보도록 하자.
+우리가 count를 예측하기 위해 다른 변수들과의 관계를 보니, hour과 count가 가장 영향을 끼치는 것으로 확인되었다. 지난 번 블로그에서 서울시 유동인구 데이터 분석을 해보니, 이러한 결과를 예상했었으나, 그 때와는 다르게 여기서는 시간에 적당한 데이터가 포함되어 있는 것을 확인할 수 있었다. 따라서 hour와 다른 변수들은 어떤 관계를 가지고 있는지 보고자 했다.
 
-- season: 의외로 Spring가 가장 낮은것을 확인 할수 있었다.
-- holiday: 0, 1 이 뚜렷하게 구분이 되어 있다. 그러나.. 좀 더 확인해볼 필요가 있어보인다.
-- workingday: 0,1 역시 뚜렷하게 구분 되어 있다.
-- weather: 정말 뚜렷하게 날씨별로 구분이 되는걸 볼 수 있다.
-- year: 2011년에 비해 2012년이 좀 더 많은걸 볼 수 있다.
-- month: 월별로 구분이 되지만 뚜렷하게 알 수 있는 방법은 없다.
-- wday: 요일별로 했을때 평일과 주말의 분포가 선명하게 보인다. 평일은 08시, 17시 (출퇴근시간), 주말은 12시에 뚜렷하게 솟아 오른걸 확인뿐만 아니라 이해를 할 수 있었다.
+- season: 봄, 여름, 가을, 겨울 중 봄, 가을이 가장 높게 나올줄 알았으나, 봄이 가장 낮게 나왔다. 
+- holiday: 0과 1이 뚜렸하게 구분되어 있다. 
+- workingday: 역시 0과 1이 뚜렸하게 구분되어 있다.
+- weather: 날씨 역시 계절과 같이 뚜렸하게 차이를 보일 것으로 예측했었다. 특히 날씨가 좋을 때 자전거 수요량이 늘어났음을 확인할 수 있었다. 
+- year: 11년도에 비해 12년도에 더 높아져 있었다. 이 추세로 13년도가 더 높아질 것을 예상했으나 성급한 추측인 것 같다. 
+- month: 월별로는 뚜렸한 특성을 찾을 수 없었다. 
+- wday: 평일과 주말의 구분이 확연하게 확인된다. 주말은 나들이 하기 좋은시간인 14쯤이 피크였고, 평일은 오전 8시경과 오후 16경이 피크였다. 
 
 ```{r}
 factor_list <- sapply(train_set_vis, is.factor) %>% 
@@ -248,11 +249,13 @@ grid.arrange(grobs=lst, ncol=2)
 <br>
 
 # XGboost
-이번엔 Xgboost를 사용하여 분석을 하기 위한 사전준비를 해주자. xgboost를 돌리기 위해선 데이터의 형식이 matrix형식이 되어야 한다.
+
+램덤포레스트, 의사결정 모델 등등 여러모델이 있지만 이번에는 xgboost를 사용해볼 것이다. xgboost는 데이터 프레임이 아니라 matrix형식이 되어야 한다. 
 
 ## count to log & train/test set 분리 
 
-Count에 log를 취해주자. 이는 RMSLE를 위한 것으로 로그를 취한 값의 RMSE를 최소화 한 것이 RMSLE가 최소화가 되기 때문이다. 또 모델을 돌릴때 datetime는 년, 월, 시간, 요일로 나누어 주었으니 빼주도록 하자.
+RMSLE 값을 최소화하기 위해서 Count 변수에 Log를 적용할 것이다. 날짜 데이터는 년, 월, 시간, 요일 등으로 구분하였으니 모델링 작업 시 제외하자. 
+
 ```{r}
 
 train_set$count <- log1p(train_set$count)
@@ -274,16 +277,52 @@ x_test <- test_set %>%
 
 ## gridsearch / cross validation
 
-Grid search와 Cross validation을 실행 해보자. xgboost를 돌리는데에 있어, 모델에 여러 조건을 넣어주기 위해 Grid search를 사용했고, 모델의 결과가 validataion에만 성능이 좋고, 실제 결과에는 성능이 좋지 않을지도 몰라 Cross validation을 해주도록 한다.(참고로 둘다 진행하는데 시간이 매우 오래 걸린다.) xgboost의 기술적인 설명은 다음 키워드를 참고하도록 하자
+Xgboost 를 사용하는데 할 때, 모델에 다양한 조건부여하는데 있어 Gird search와 Cross validation 을 이용할 것이다. 검증 단계에서만 좋은 결괏값이 나오고 실 성능은 그렇지 않을수도 있기 때문에 Cross validation을 적용하였다. 
 
-```{r}
-d_train <- xgb.DMatrix(x_train, label = y_train)
+```{r results="hide"}
+dtrain <- xgb.DMatrix(x_train, label = y_train)
 
+
+searchGridSubCol <- expand.grid(subsample = c(0.5, 0.6),
+                                colsample_bytree = c(0.5, 0.6),
+                                max_depth = c(7:15),
+                                min_child = seq(1),
+                                eta = c(0.05,0.1,0.15)
+) # 2 * 2* 9 * 1 * 3 * 150 = ?
+
+ntrees <- 10
+
+rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
+
+  #Extract Parameters to test
+  currentSubsampleRate <- parameterList[["subsample"]]
+  currentColsampleRate <- parameterList[["colsample_bytree"]]
+  currentDepth <- parameterList[["max_depth"]]
+  currentEta <- parameterList[["eta"]]
+  currentMinChild <- parameterList[["min_child"]]
+
+  xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE,
+                           metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
+                           "objective" = "reg:linear", "max.depth" = currentDepth, "eta" = currentEta,
+                           "subsample" = currentSubsampleRate, "colsample_bytree" = currentColsampleRate
+                           , print_every_n = 10, "min_child_weight" = currentMinChild, booster = "gbtree",
+                           early_stopping_rounds = 10)
+
+  xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
+  rmse <- tail(xvalidationScores$test_rmse_mean, 1)
+  trmse <- tail(xvalidationScores$train_rmse_mean,1)
+  output <- return(c(rmse, trmse,currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))})
+
+
+output <- as.data.frame(t(rmseErrorsHyperparameters))
+varnames <- c("TestRMSE", "TrainRMSE", "SubSampRate", "ColSampRate", "Depth", "eta", "currentMinChild")
+names(output) <- varnames
 ```
 
 ## gridsearch / cross validation 결과
 
 ```{r}
+tail(output)
 
 ```
 
@@ -294,7 +333,7 @@ d_train <- xgb.DMatrix(x_train, label = y_train)
 
 
 model <- xgb.train(
-  data = d_train, 
+  data = dtrain, 
   max_depth = 10,
   nround = 150,
   eta = 0.15,
@@ -316,3 +355,6 @@ solution = data.frame(datetime = test_set$datetime, count = pred)
 write.csv(solution, "solution.csv", row.names = FALSE)
 ```
 
+
+---
+출처 : https://unfinishedgod.github.io/docs/kaggle/bike_sharing_demand/Bike_Sharing_Demand.html
