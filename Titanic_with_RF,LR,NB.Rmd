@@ -1,0 +1,77 @@
+---
+title: "Titanic with RF, LR, NB"
+author: "Ryu"
+date: '2020 3 24 '
+output: html_document
+         
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages
+```{r}
+library(tidyverse)
+library(ggthemes)
+library(corrplot)
+library(VIM)
+library(caret)
+library(RANN)
+library(reshape2)
+#install.packages("VIM")
+```
+
+
+## Read in data
+
+```{r}
+train_data = read.csv("Tanic_train.csv", na.strings = "")
+test_data = read.csv("Tanic_test.csv", na.strings = "")
+
+full_data <- bind_rows(train_data, test_data)
+
+head(full_data)
+summary(full_data)
+```
+
+<br>
+
+# Exploratory Data Analysis
+
+```{r}
+
+# Survival
+ggplot(full_data[1:891,], aes(x = factor(Survived), fill = factor(Survived))) +
+  geom_bar(position = 'dodge') +
+  scale_x_discrete() +
+  labs(title = 'Survival on the Titanic', x = "outcome", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Sex
+ggplot(full_data[1:891,], aes(x = factor(Sex), fill = factor(Survived))) +
+  geom_bar(position = 'dodge') +
+  scale_x_discrete() +
+  labs(title = "Survival by Gender", x = "Gender", y = "Rate") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Pclass
+ggplot(full_data[1:891,], aes(x = factor(Pclass), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete() +
+  labs(title = "Survival by passenger Class", x = "Passenger Class", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Embarkment 
+ggplot(full_data[1:891,], aes(x = factor(Embarked), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  theme(legend.position = "right") +
+  theme_classic()
+```
+
