@@ -7,7 +7,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set( message = FALSE,
+       warning = FALSE)
 ```
 
 ## Load packages
@@ -31,15 +32,27 @@ test_data = read.csv("Tanic_test.csv", na.strings = "")
 
 full_data <- bind_rows(train_data, test_data)
 
+#write.csv(full_data, file = "test_titanic.csv", row.names = TRUE)
+
 head(full_data)
 summary(full_data)
+
 ```
 
 <br>
 
 # Exploratory Data Analysis
 
-```{r}
+탐색적 데이터 분석을 통해 우리는 다음과 같은 사실을 알 수 있다.
+
+- 타이타닉 호의 승객의 대부분은 죽었다.
+- 대부분의 생존자에 있어서 여성의 생존 기회가 남성보다 더 많았다.
+- 보다 높은 등급의 승객이 생존의 기회가 더 많았다.
+- C 구역에서 탑승한 사람들이 다른 구역에서 탑승한 사람보다 조금 더 높은 생존률을 모였다. 
+- 16세 이하가 높은 생존률을 보이는 경향이 있으며, 다른 연령대는 죽음에 대한 높은 리스크가 있었다. 
+- 높은 요금을 지불한 승객은 일반적으로, 상대적으로 적은 요금을 지불한 승객에 비해 생존률이 높았다. 
+
+```{r out.width=c('33%', '34%', '33%'), fig.show='hold'}
 
 # Survival
 ggplot(full_data[1:891,], aes(x = factor(Survived), fill = factor(Survived))) +
@@ -73,5 +86,265 @@ ggplot(full_data[1:891,], aes(x = factor(Embarked), fill = factor(Survived))) +
   geom_bar(position = "dodge") +
   theme(legend.position = "right") +
   theme_classic()
+
+# Age 
+ggplot(full_data[1:981,]) +
+  geom_freqpoly(aes(x = Age, color = factor(Survived)), binwidth = 1) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Survival by Age", x = "Age", y = "Count")
+
+# Fare
+ggplot(full_data[1:891,]) +
+  geom_freqpoly(aes( x = Fare, color = factor(Survived)), binwidth = 0.05) +
+  scale_x_log10() +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Survival by Fare(log10)", x = "Fare(log10)", y ="Count")
 ```
 
+# 변수와 생존 사이의 정확도 검증
+
+여기서 성별, 승객 등급, 그리고 운임이 생존과 낮거나 중간정도의 상관관계를 가지고 있음을 알 수 있다. 이것은 생존을 예측하는 데 중요할 수 있다는 것을 의미한다. 
+```{r fig.height=4, fig.width=5, fig.align = 'center'}
+# Numeric 데이터로 변경
+full_data$Sex <- as.numeric(full_data$Sex)
+
+# 상관관계 플럿 생성
+corrplot.mixed(corr = cor(full_data[c("Survived", "Fare", "Sex","Pclass", "Age")], use = "complete.obs"), tl.col = "black", upper = "ellipse")
+
+```
+
+<br>
+
+# Feature Engineering
+
+새로운 변수들을 생성해서 특징들을 파악해 볼 것이다.
+- **Family_size**
+- **Title**
+- **Cabin_letter**
+- **Ticket_number**
+
+## Family size
+Family size 생성을 위해 *Sibsp*(siblings + spouse) 와 *Parch*(parents + children) + 1  조합으로 변수를 만들어 특장을 살펴볼 것이다. (개인 고객이 있으므로 + 1을 해줌)
+
+```{r}
+full_data$family_size = full_data$SibSp + full_data$Parch + 1
+```
+
+새롭게 만들어진 Family_size 변수가 그래프로 어떻게 표현되는지 확인해보자.
+
+```{r}
+ggplot(full_data[1:891,], aes(x = factor(family_size), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete() +
+  labs(title = "Survival by Family Size on Board", 
+       x = "Number of family merbers on board", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+```
+
+그래프를 보니 2 ~ 4명 가족단위가 생존에 있어 혜택을 받은 것으로 보인다. 반면에 1명이거나 5명 이상 단위의 그룹은 생존에 있어 그 기회가 적었음을 확인할 수 있다. 이러한 구분을 보여주는 새로운 변수를 만들어 예측모델의 성능을 향상시킬 수 있는 가능성을 보자. 
+
+```{r}
+# Create categories for family size : 1, 2-4, 5+
+full_data$family_size_range = cut(full_data$family_size, c(0, 1, 4, 15), include.lowest = TRUE)
+
+# 그 다음, 변수의 이름을 수정하자
+levels(full_data$family_size_range) = c("1", "2-4", "5+")
+
+
+```
+
+그래프를 통해 Family_size 변수와 비교해보자 
+
+```{r}
+ggplot(full_data[1:891,], aes(x = factor(family_size_range),
+                              fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete() +
+  labs(title = "Survival by Famil Size on Board",
+       x = "Family size", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c( "Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+```
+
+여기서 우리는 조금 더 확실하게 2~4명 단위의 승객의 생존률이 한 명이나 다섯명 단위 승객의 생존률 보다 높음을 알 수 있다. 
+
+<br>
+
+## Title 
+
+계속해서 두 번째 변수인 *Title* 을 만들어보자. 기존의 변수 '이름' 변수에서 타이틀 정보를 추출할 것이다. 이 제목이 생존을 예측하는데 유용한 정보를 제공하기를 바란다. 정규식 표현을 사용하여 타이틀을 추출한다.
+
+
+```{r}
+full_data$Title <- gsub('(.*,)|(\\..*)', '', full_data$Name)
+```
+
+Title의 테이블을 한번 살펴보도록 하자.
+
+```{r}
+table(full_data$Title)
+#names(table(full_data$Title))
+```
+
+몇몇 타이틀에서는 거의 나타나지 않았기 때문에 이것들을 새로운 카테고리인 *rare_title*에 재할당할 것이다.
+
+```{r}
+rare_title = c("Capt","Col","Don","Jonkheer","Lady","Major","Rev","Sir","the Countess","Dr")
+
+full_data$Title[full_data$Title %in% rare_title] <- "Rare title"
+```
+
+몇몇 타이틀에 적당한 카테고리 재할당.
+
+```{r}
+full_data$Title[full_data$Title=='Mlle'] <- 'Miss'
+full_data$Title[full_data$Title=='Ms'] <- 'Miss'
+full_data$Title[full_data$Title=='Dona'] <- 'Miss'
+full_data$Title[full_data$Title=='Mme'] <- 'Mrs'
+
+```
+
+타이틀을 그래프화해서 생존률에 어떤 영향을 끼치는지 보자.
+
+```{r , echo=FALSE, fig.align='center'}
+ggplot(full_data[1:891,], aes(x = Title, fill = factor(Survived))) +
+         geom_bar(position = "dodge") +
+         scale_x_discrete() +
+         labs(title = "Survival by Title" , x = "Title", y = "Count") +
+         scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+         theme(legend.position = "right") +
+         theme_classic()
+```
+
+
+이 그래프에서 우리는 Miss 와 Mrs 호칭을 가진 사람들의 생존률이 가장 높은 것을 확인할 수 있다. 여성들 사이에서 생존률이 높았기 때문에 예상과 일치하는 결과라고 볼 수 있다. 또 Maser 호칭을 가진 사람들 또한 생존률이 높았다. 이 그래프에서 Mr호칭은 죽음에 대한 확실한 경향을 보여주고 있다. 
+
+
+<br>
+
+## Cabin
+
+정규식 표현을 사용하여 cabin letter을 발췌해보자.
+
+```{r}
+full_data$Cabin_letter <- gsub('[0-9].*', '', full_data$Cabin)
+```
+
+어떤 선실들은 거의 발생하지 않으며 어떤 선실들은 두 개의 선실로 분류된다. 우리는 이것들을 결합하여 *EFGT*라고 불리는 새로운 실내 표시기를 만들 것이다. 또한 우리는 기내 문자가 없는 것을 "빈칸"으로 리코딩할 것이다.
+
+```{r}
+full_data$Cabin_letter[full_data$Cabin_letter == "E"] <- "EFGT"
+full_data$Cabin_letter[full_data$Cabin_letter == "F"] <- "EFGT"
+full_data$Cabin_letter[full_data$Cabin_letter == "F E"] <- "EFGT"
+full_data$Cabin_letter[full_data$Cabin_letter == "F G"] <- "EFGT"
+full_data$Cabin_letter[full_data$Cabin_letter == "G"] <- "EFGT"
+full_data$Cabin_letter[full_data$Cabin_letter == "T"] <- "EFGT"
+
+full_data$Cabin_letter[is.na(full_data$Cabin_letter)] <- "Blank"
+
+```
+
+
+Cabin_letter 가 생존에 어떠한 영향을 미치는지 그래프로 확인해보자.
+
+```{r}
+ggplot(full_data[1:891,], aes(x = factor(Cabin_letter), fill=factor(Survived))) +
+       geom_bar(position = 'dodge') +
+       scale_x_discrete() +
+       labs(title = 'Survival by Cabin', x = 'Cabin', y = 'Count') + 
+       scale_fill_discrete(name = 'Outcome', labels = c('Died', 'Survived')) + 
+       theme_classic() 
+```
+
+그래프를 보고나니, Cabin 을 가진 사람의 생존률이 높고 그러지 못한 사람은 생존률이 떨어지다는 것을 알 수 있었다. 조금 더 자세히 보도록 하자. 
+
+```{r}
+full_data$Cabin_presence[full_data$Cabin_letter == "Blank"] <- "No cabin"
+full_data$Cabin_presence[is.na(full_data$Cabin_presence)] <- "Cabin"
+
+```
+
+그래프를 띄워보자.
+```{r}
+ggplot(full_data[1:891,], aes( x = factor(Cabin_presence), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete() +
+  labs(title = "Survival by Cabin", x = "Cabin", y ="Count") +
+  scale_fill_discrete(name = "Outcome", labels = c( "Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+```
+
+역시 cabin 을 배정받은 사람의 생존률이 더 높았다. 
+
+<br> 
+
+## Ticket number
+
+이제 정규식을 사용하여 숫자가 아닌 문자를 제거하여 *티켓*에서 *티켓_번호*를 추출할 것이다.
+
+```{r}
+full_data$Ticket_number <- gsub('[^0-9]', '', full_data$Ticket)
+
+```
+
+티켓 번호에서 모든 글자를 삭제하는 과정에서 일부 글자는 공백("") 그들 중 몇 명이 비어 있는지 보고 그들에게 값을 재할당하자.
+
+```{r}
+table(full_data$Ticket_number=="")
+
+full_data$Ticket_number[full_data$Ticket_number==""] <- 0
+```
+
+티켓번호 log 를 그래프화 해보자.
+
+```{r}
+full_data$Ticket_number <- as.integer(full_data$Ticket_number)
+
+ggplot(full_data[1:891,]) + 
+       geom_freqpoly(aes(x = Ticket_number, color = factor(Survived)), binwidth=0.1) +
+       scale_x_log10() +
+       scale_color_discrete(name = 'Outcome', labels = c('Died', 'Survived')) +
+       theme_classic() +
+       labs(title = 'Survival by Ticket number', x = 'Ticket number', y = 'Count')
+```
+
+나는 티켓 번호와 생존 사이에 즉각적인 추세가 보이지 않는다. 두 변수의 상관관계를 확인해보자.
+
+```{r}
+cor(full_data$Ticket_number, as.numeric(full_data$Survived), use = 'complete.obs')
+
+```
+
+여기에는 실질적인 상관관계가 없는 것 같으니, 우리는 티켓 번호 변수를 우리의 예측 모델에서 제외시켜야 할 것이다.
+
+<br>
+
+# Fixing Missing Values
+
+## 데이터 준비
+
+Missing Value를 수정하기에 앞서 데이터를 준비해보자. 첫째, 데이터 세트에서 하위 집합을 만들고 나중에 예측을 위해 유지하고자 하는 관련 변수만 포함해야 할 것이다.
+
+
+```{r}
+full_data_relevant <- subset(full_data, select = c(Survived, Pclass, Sex, Age, Fare, Title, Cabin_presence, family_size_range))
+```
+
+다음은 각 변수가 숫자형과 팩터형에 맞게 분류되었는지 확인해보자. 
+
+```{r}
+full_data_relevant$Survived <- as.factor(full_data_relevant$Survived)
+full_data_relevant$Pclass <- factor(full_data_relevant$Pclass, ordered = TRUE)
+full_data_relevant$Survived <- as.factor(full_data_relevant$Survived)
+full_data_relevant$Title <- as.factor(full_data_relevant$Title)
+# full_data_relevant$cabin_presence <-as.factor(full_data_relevant$cabin_presence)
+```
+```
+
+출처 : https://www.kaggle.com/tavoosi/predicting-survival-on-the-titanic-with-rf-lr-nb/report
