@@ -1,18 +1,40 @@
 ---
-title: "Titanic with RF, LR, NB"
+title: "Predicting Survival on the Titanic"
 author: "Ryu"
-date: '2020 3 24 '
-output: html_document
+date: "`r Sys.Date()`"
+output: 
+   prettydoc::html_pretty:
+    theme: tactile
+    df_print: paged
+
          
 ---
+
+<p align="center">
+<b>Github Code: [Jun4871 Github](https://github.com/Jun4871/Kaggle/blob/master/Titanic_with_RF%2CLR%2CNB.Rmd) </b><br>
+</p>
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set( message = FALSE,
        warning = FALSE)
 ```
 
-## Load packages
+# 개요
+
+과거 의사결정 나무 기법을 통해 타이타닉 생존자 예측을 해본 적이 있었는데, 사람마다 분석하는 방식이 전부 다를 수 있고 이것에 대해 추가적인 공부가 더 필요할 것 같아 다른 사람들의 분석과정을 참고하여 분석을 진행해보고자 한다. 이번 타이타닉 생존자 예측에 있어, 3가지 머신러닝 기법을 사용할 것이다.
+
+<br>
+
+- **랜덤 포레스트(Random Forest)**
+- **로지스틱 회귀(Logistic Regression)**
+- **나이브 베이즈(Naive Bayes**
+
+## 패키지 로드
+
+분석에 필요한 라이브러리를 불러오는 과정이다. 아래 패키지들을 이번 분석에 활용할 것이다.
+
 ```{r}
+library(gridExtra)
 library(tidyverse)
 library(ggthemes)
 library(corrplot)
@@ -24,8 +46,9 @@ library(reshape2)
 ```
 
 
-## Read in data
+## 데이터 읽어오기
 
+지정한 데이터를 R로 읽어오는 과정이며, Kaggle에서 받은 train과 test 데이터를 bind_row() 함수로 묶어서 진행할 것이다. (DPLYR 패키지에 내장되어 있다)
 ```{r}
 train_data = read.csv("Tanic_train.csv", na.strings = "")
 test_data = read.csv("Tanic_test.csv", na.strings = "")
@@ -34,6 +57,11 @@ full_data <- bind_rows(train_data, test_data)
 
 #write.csv(full_data, file = "test_titanic.csv", row.names = TRUE)
 
+
+```
+
+head() 함수를 통해 합쳐진 데이터의 6th 행까지 탐색해보고, summary() 함수를 통해 통계적 요약치를 확인해보자.
+```{r}
 head(full_data)
 summary(full_data)
 
@@ -41,7 +69,63 @@ summary(full_data)
 
 <br>
 
-# Exploratory Data Analysis
+# 탐색적 데이터 분석
+
+우리의 변수 중 일부를 그래프로 그려 그것들이 생존율에 어떤 영향을 미치는지 시각화해보자.
+
+```{r fig.show='hold', fig.align='center', fig.height=15, fig.width = 16}
+
+# Survival
+g1 <- ggplot(full_data[1:891,], aes(x = factor(Survived), fill = factor(Survived))) +
+  geom_bar(position = 'dodge') +
+  scale_x_discrete() +
+  labs(title = 'Survival on the Titanic', x = "outcome", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Sex
+g2 <- ggplot(full_data[1:891,], aes(x = factor(Sex), fill = factor(Survived))) +
+  geom_bar(position = 'dodge') +
+  scale_x_discrete() +
+  labs(title = "Survival by Gender", x = "Gender", y = "Rate") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Pclass
+g3 <- ggplot(full_data[1:891,], aes(x = factor(Pclass), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete() +
+  labs(title = "Survival by passenger Class", x = "Passenger Class", y = "Count") +
+  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Embarkment 
+g4 <- ggplot(full_data[1:891,], aes(x = factor(Embarked), fill = factor(Survived))) +
+  geom_bar(position = "dodge") +
+  theme(legend.position = "right") +
+  theme_classic()
+
+# Age 
+g5 <- ggplot(full_data[1:981,]) +
+  geom_freqpoly(aes(x = Age, color = factor(Survived)), binwidth = 1) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Survival by Age", x = "Age", y = "Count")
+
+# Fare
+g6 <- ggplot(full_data[1:891,]) +
+  geom_freqpoly(aes( x = Fare, color = factor(Survived)), binwidth = 0.05) +
+  scale_x_log10() +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Survival by Fare(log10)", x = "Fare(log10)", y ="Count")
+
+grid.arrange(g1,g2,g3,g4,g5,g6, ncol=2)
+
+```
 
 탐색적 데이터 분석을 통해 우리는 다음과 같은 사실을 알 수 있다.
 
@@ -52,61 +136,11 @@ summary(full_data)
 - 16세 이하가 높은 생존률을 보이는 경향이 있으며, 다른 연령대는 죽음에 대한 높은 리스크가 있었다. 
 - 높은 요금을 지불한 승객은 일반적으로, 상대적으로 적은 요금을 지불한 승객에 비해 생존률이 높았다. 
 
-```{r out.width=c('33%', '34%', '33%'), fig.show='hold'}
+# 변수와 생존 사이의 상관관계 검증
 
-# Survival
-ggplot(full_data[1:891,], aes(x = factor(Survived), fill = factor(Survived))) +
-  geom_bar(position = 'dodge') +
-  scale_x_discrete() +
-  labs(title = 'Survival on the Titanic', x = "outcome", y = "Count") +
-  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
-  theme(legend.position = "right") +
-  theme_classic()
+여기서 성별, 승객 등급, 그리고 운임비 변수가 생존과 낮거나 중간정도의 상관관계를 가지고 있음을 알 수 있다. 이것은 생존을 예측하는 데 중요할 수 있다는 것을 의미한다. 
+```{r fig.height=4, fig.width=5, fig.align = 'center', echo=FALSE}
 
-# Sex
-ggplot(full_data[1:891,], aes(x = factor(Sex), fill = factor(Survived))) +
-  geom_bar(position = 'dodge') +
-  scale_x_discrete() +
-  labs(title = "Survival by Gender", x = "Gender", y = "Rate") +
-  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
-  theme(legend.position = "right") +
-  theme_classic()
-
-# Pclass
-ggplot(full_data[1:891,], aes(x = factor(Pclass), fill = factor(Survived))) +
-  geom_bar(position = "dodge") +
-  scale_x_discrete() +
-  labs(title = "Survival by passenger Class", x = "Passenger Class", y = "Count") +
-  scale_fill_discrete(name = "Outcome", labels = c("Died", "Survived")) +
-  theme(legend.position = "right") +
-  theme_classic()
-
-# Embarkment 
-ggplot(full_data[1:891,], aes(x = factor(Embarked), fill = factor(Survived))) +
-  geom_bar(position = "dodge") +
-  theme(legend.position = "right") +
-  theme_classic()
-
-# Age 
-ggplot(full_data[1:981,]) +
-  geom_freqpoly(aes(x = Age, color = factor(Survived)), binwidth = 1) +
-  theme_classic() +
-  theme(legend.position = "none") +
-  labs(title = "Survival by Age", x = "Age", y = "Count")
-
-# Fare
-ggplot(full_data[1:891,]) +
-  geom_freqpoly(aes( x = Fare, color = factor(Survived)), binwidth = 0.05) +
-  scale_x_log10() +
-  theme_classic() +
-  theme(legend.position = "none") +
-  labs(title = "Survival by Fare(log10)", x = "Fare(log10)", y ="Count")
-```
-
-# 변수와 생존 사이의 정확도 검증
-
-여기서 성별, 승객 등급, 그리고 운임이 생존과 낮거나 중간정도의 상관관계를 가지고 있음을 알 수 있다. 이것은 생존을 예측하는 데 중요할 수 있다는 것을 의미한다. 
-```{r fig.height=4, fig.width=5, fig.align = 'center'}
 # Numeric 데이터로 변경
 full_data$Sex <- as.numeric(full_data$Sex)
 
@@ -115,11 +149,13 @@ corrplot.mixed(corr = cor(full_data[c("Survived", "Fare", "Sex","Pclass", "Age")
 
 ```
 
+
 <br>
 
-# Feature Engineering
+# 변수 가공
 
-새로운 변수들을 생성해서 특징들을 파악해 볼 것이다.
+새로운 변수들을 생성해서 특징들을 파악해 볼 것이다 
+
 - **Family_size**
 - **Title**
 - **Cabin_letter**
@@ -134,7 +170,7 @@ full_data$family_size = full_data$SibSp + full_data$Parch + 1
 
 새롭게 만들어진 Family_size 변수가 그래프로 어떻게 표현되는지 확인해보자.
 
-```{r}
+```{r, echo=FALSE, fig.align='center'}
 ggplot(full_data[1:891,], aes(x = factor(family_size), fill = factor(Survived))) +
   geom_bar(position = "dodge") +
   scale_x_discrete() +
@@ -157,9 +193,9 @@ levels(full_data$family_size_range) = c("1", "2-4", "5+")
 
 ```
 
-그래프를 통해 Family_size 변수와 비교해보자 
+그래프를 통해 Family_size 변수와 비교했을 때 어떨지 확인해보자. 
 
-```{r}
+```{r , echo=FALSE, fig.align='center'}
 ggplot(full_data[1:891,], aes(x = factor(family_size_range),
                               fill = factor(Survived))) +
   geom_bar(position = "dodge") +
@@ -177,21 +213,21 @@ ggplot(full_data[1:891,], aes(x = factor(family_size_range),
 
 ## Title 
 
-계속해서 두 번째 변수인 *Title* 을 만들어보자. 기존의 변수 '이름' 변수에서 타이틀 정보를 추출할 것이다. 이 제목이 생존을 예측하는데 유용한 정보를 제공하기를 바란다. 정규식 표현을 사용하여 타이틀을 추출한다.
+계속해서 두 번째 변수인 *Title* 을 만들어보자. 기존의 변수 '이름' 변수에서 타이틀 정보를 추출할 것이다. 이 변수가 생존을 예측하는데 유용한 정보를 제공하기를 바라며, 정규식 표현을 사용하여 Title 을 추출해보자.
 
 
 ```{r}
-full_data$Title <- gsub('(.*,)|(\\..*)', '', full_data$Name)
+full_data$Title <- gsub('(.*, )|(\\..*)', '', full_data$Name)
 ```
 
-Title의 테이블을 한번 살펴보도록 하자.
+Title의 테이블을 한 번 살펴보도록 하자.
 
 ```{r}
 table(full_data$Title)
 #names(table(full_data$Title))
 ```
 
-몇몇 타이틀에서는 거의 나타나지 않았기 때문에 이것들을 새로운 카테고리인 *rare_title*에 재할당할 것이다.
+몇몇 직함들은 거의 없는 것이나 다름이 없었기 때문에 이것들을 새로운 카테고리인 *rare_title*에 재할당할 것이다.
 
 ```{r}
 rare_title = c("Capt","Col","Don","Jonkheer","Lady","Major","Rev","Sir","the Countess","Dr")
@@ -199,7 +235,7 @@ rare_title = c("Capt","Col","Don","Jonkheer","Lady","Major","Rev","Sir","the Cou
 full_data$Title[full_data$Title %in% rare_title] <- "Rare title"
 ```
 
-몇몇 타이틀에 적당한 카테고리 재할당.
+적당한 카테고리에 재할당해주자. 
 
 ```{r}
 full_data$Title[full_data$Title=='Mlle'] <- 'Miss'
@@ -209,7 +245,7 @@ full_data$Title[full_data$Title=='Mme'] <- 'Mrs'
 
 ```
 
-타이틀을 그래프화해서 생존률에 어떤 영향을 끼치는지 보자.
+그래프화해서 직함이 생존률에 어떤 영향을 끼치는지 보자.
 
 ```{r , echo=FALSE, fig.align='center'}
 ggplot(full_data[1:891,], aes(x = Title, fill = factor(Survived))) +
@@ -229,13 +265,15 @@ ggplot(full_data[1:891,], aes(x = Title, fill = factor(Survived))) +
 
 ## Cabin
 
-정규식 표현을 사용하여 cabin letter을 발췌해보자.
+여기서는 cabin letter 를 *Cabin* 컬럼에서 추출하여, 새로운 *Cabin_letter* 라는 컬럼을 생성할 것이다. 
+
+정규식 표현을 사용하여 cabin letter을 추출해보자.
 
 ```{r}
 full_data$Cabin_letter <- gsub('[0-9].*', '', full_data$Cabin)
 ```
 
-어떤 선실들은 거의 발생하지 않으며 어떤 선실들은 두 개의 선실로 분류된다. 우리는 이것들을 결합하여 *EFGT*라고 불리는 새로운 실내 표시기를 만들 것이다. 또한 우리는 기내 문자가 없는 것을 "빈칸"으로 리코딩할 것이다.
+어떤 선실들은 적은 데이터를 가지고 있고, 어떤 선실들은 두 개의 선실로 분류된다. 우리는 이것들을 결합하여 *EFGT*라고 명명하여 새로운 이름을 만들 것이다. 그리고 기내 문자가 없는 것을 "빈칸"으로 리코딩할 것이다.
 
 ```{r}
 full_data$Cabin_letter[full_data$Cabin_letter == "E"] <- "EFGT"
@@ -252,7 +290,7 @@ full_data$Cabin_letter[is.na(full_data$Cabin_letter)] <- "Blank"
 
 Cabin_letter 가 생존에 어떠한 영향을 미치는지 그래프로 확인해보자.
 
-```{r}
+```{r , echo=FALSE, fig.align='center'}
 ggplot(full_data[1:891,], aes(x = factor(Cabin_letter), fill=factor(Survived))) +
        geom_bar(position = 'dodge') +
        scale_x_discrete() +
@@ -264,14 +302,14 @@ ggplot(full_data[1:891,], aes(x = factor(Cabin_letter), fill=factor(Survived))) 
 그래프를 보고나니, Cabin 을 가진 사람의 생존률이 높고 그러지 못한 사람은 생존률이 떨어지다는 것을 알 수 있었다. 조금 더 자세히 보도록 하자. 
 
 ```{r}
-full_data$Cabin_presence[full_data$Cabin_letter == "Blank"] <- "No cabin"
-full_data$Cabin_presence[is.na(full_data$Cabin_presence)] <- "Cabin"
+full_data$cabin_presence[full_data$Cabin_letter == "Blank"] <- "No cabin"
+full_data$cabin_presence[is.na(full_data$cabin_presence)] <- "Cabin"
 
 ```
 
-그래프를 띄워보자.
-```{r}
-ggplot(full_data[1:891,], aes( x = factor(Cabin_presence), fill = factor(Survived))) +
+다시 그래프를 띄워보자.
+```{r echo=FALSE, fig.align='center'}
+ggplot(full_data[1:891,], aes( x = factor(cabin_presence), fill = factor(Survived))) +
   geom_bar(position = "dodge") +
   scale_x_discrete() +
   labs(title = "Survival by Cabin", x = "Cabin", y ="Count") +
@@ -286,7 +324,7 @@ ggplot(full_data[1:891,], aes( x = factor(Cabin_presence), fill = factor(Survive
 
 ## Ticket number
 
-이제 정규식을 사용하여 숫자가 아닌 문자를 제거하여 *티켓*에서 *티켓_번호*를 추출할 것이다.
+정규표현식을 사용하여 숫자데이터가 아닌 것은 전부 제거하여 *Ticket*에서 *Ticket_number* 를 추출할 것이다.
 
 ```{r}
 full_data$Ticket_number <- gsub('[^0-9]', '', full_data$Ticket)
@@ -295,15 +333,16 @@ full_data$Ticket_number <- gsub('[^0-9]', '', full_data$Ticket)
 
 티켓 번호에서 모든 글자를 삭제하는 과정에서 일부 글자는 공백("") 그들 중 몇 명이 비어 있는지 보고 그들에게 값을 재할당하자.
 
-```{r}
+```{r  results='hold'}
 table(full_data$Ticket_number=="")
 
 full_data$Ticket_number[full_data$Ticket_number==""] <- 0
 ```
 
+
 티켓번호 log 를 그래프화 해보자.
 
-```{r}
+```{r , fig.align='center'}
 full_data$Ticket_number <- as.integer(full_data$Ticket_number)
 
 ggplot(full_data[1:891,]) + 
@@ -314,37 +353,323 @@ ggplot(full_data[1:891,]) +
        labs(title = 'Survival by Ticket number', x = 'Ticket number', y = 'Count')
 ```
 
-나는 티켓 번호와 생존 사이에 즉각적인 추세가 보이지 않는다. 두 변수의 상관관계를 확인해보자.
+티켓 번호와 생존 사이에 명확한 추세가 보이지 않는다. 두 변수의 상관관계를 확인해보자.
 
 ```{r}
 cor(full_data$Ticket_number, as.numeric(full_data$Survived), use = 'complete.obs')
 
 ```
 
-여기에는 실질적인 상관관계가 없는 것 같으니, 우리는 티켓 번호 변수를 우리의 예측 모델에서 제외시켜야 할 것이다.
+여기에는 실질적인 상관관계가 없는 것 같으니, 티켓 번호 변수를 예측 모델에서 제외시키도록 한다.
 
 <br>
 
-# Fixing Missing Values
+# 결측치 조작
 
 ## 데이터 준비
 
-Missing Value를 수정하기에 앞서 데이터를 준비해보자. 첫째, 데이터 세트에서 하위 집합을 만들고 나중에 예측을 위해 유지하고자 하는 관련 변수만 포함해야 할 것이다.
+Missing Value를 수정하기에 앞서 데이터를 준비해보자.
 
+첫째, 데이터 세트에서 하위 집합을 만들고 나중에 예측을 위해 유지하고자 하는 관련 변수만 포함할 것이다.
 
 ```{r}
-full_data_relevant <- subset(full_data, select = c(Survived, Pclass, Sex, Age, Fare, Title, Cabin_presence, family_size_range))
+full_data_relevant <- subset(full_data, select = c(Survived, Pclass, Sex, Age, Fare, Title, cabin_presence, family_size_range))
 ```
 
-다음은 각 변수가 숫자형과 팩터형에 맞게 분류되었는지 확인해보자. 
+각 변수가 숫자형과 팩터형에 맞게 분류되었는지 확인해보자. 
 
 ```{r}
 full_data_relevant$Survived <- as.factor(full_data_relevant$Survived)
 full_data_relevant$Pclass <- factor(full_data_relevant$Pclass, ordered = TRUE)
 full_data_relevant$Survived <- as.factor(full_data_relevant$Survived)
 full_data_relevant$Title <- as.factor(full_data_relevant$Title)
-# full_data_relevant$cabin_presence <-as.factor(full_data_relevant$cabin_presence)
-```
+full_data_relevant$cabin_presence <-as.factor(full_data_relevant$cabin_presence)
 ```
 
-출처 : https://www.kaggle.com/tavoosi/predicting-survival-on-the-titanic-with-rf-lr-nb/report
+
+<br>
+
+## 결측치 처리
+
+우리는 이제 **Fare** 와 **Age** 에 대한 우리의 누락된 값을 처리할 것이다. 데이터에서 누락된 값이 무엇인지 확인하는 것부터 알아보자. 여기에 VIM 패키지의 aggr()를 사용할 것이다.
+
+```{r fig.height=5, fig.width=8, fig.align='center'}
+aggr(full_data_relevant, sortVars = TRUE, prop = FALSE, cex.axis = .6, numbers = TRUE)
+```
+
+이제 "preProcess() 기능을 사용하여 누락된 값 모델을 nnImpute로 사전에 처리하겠다. 이렇게 하면 데이터가 확장된다. 우리는 생존 변수를 사전 프로세스 모델에서 제외시킨 후 나중에 다시 추가할 것이다.
+
+```{r results='hold'}
+md_prediction <- preProcess(full_data_relevant[c(2:8)], method = c( "knnImpute", "center", "scale"))
+
+print(md_prediction)
+```
+
+이제, 우리는 우리가 만든 모델을 사용하여 지속적인 우리의 결측치, 즉 페어와 에이지를 예측할 것이다. 우리는 나중에 착수할 NA를 계산할 것이다.
+
+전에 만든 모델을 사용하여 잔존하는 missing value를 예측할 것이다. 즉 Fare 와 Age 가 되겠다. 그리고 embarked later 에 대한 NA 값을 계산할 것이다. 
+```{r}
+full_data_complete <- predict(md_prediction, newdata = full_data_relevant[c(2:8)])
+```
+
+이제 데이터 프레임에 'Survived'를 다시 추가하고, full_data_complete 와 full_data의 변수들을 새로운 데이터 프레임으로 만들어보자.
+```{r}
+full_data_final <- data.frame(full_data_complete, full_data$Survived)
+
+full_data_final <- cbind(full_data$PassengerId, full_data_final)
+```
+
+'full_data.Survived' 컬럼이름을 다시 'Survived'로 명명하고 새로운 데이터 프레임을 만든다.
+```{r}
+full_data_final <- rename(full_data_final, Survived = full_data.Survived, PassengerId = "full_data$PassengerId")
+
+full_data_final$Survived <- as.factor(full_data_final$Survived)
+```
+
+<br>
+
+# 머신러닝 알고리즘
+
+데이터 모델링을 시작하기 전에 데이터 셋을 train 및 test 데이터로 분할하자. 
+
+```{r}
+train <- full_data_final[1:891,]
+test <- full_data_final[892:1309,]
+```
+
+## 랜덤 포레스트(Random Forest)
+
+이제 타이타닉에서 생존을 예측할 수 있는 예측 모델을 만들어보자. 우리가 사용할 첫번째 분류 알고리즘은 **랜덤 포리스트**이다.
+
+CARET 패키지의 train() 기능을 활용하여 training model을 만들 것이다. 
+
+```{r}
+set.seed(222) # Set a random seed
+
+rf_model <- train(Survived ~ ., 
+                  method = "rf",
+                  data = train); print(rf_model)
+```
+
+혼동행렬을 사용하여 방금 만든 랜덤포레스트 모델의 점검해보자. 이것은 우리에게 우리의 모델의 예상 전반적인 정확성 뿐만 아니라 뿐만 아니라 죽음과 생존예측에 대한 정확성을 알 수 있다. 
+
+```{r}
+confusionMatrix(rf_model)
+```
+
+우리의 예측에 모델 오차율을 표시한다.
+
+```{r  fig.height=4, fig.width=8, fig.align='center'}
+
+# Create data frame of error rate
+rf_err_model <- as.data.frame(rf_model[["finalModel"]][["err.rate"]])
+rf_err_model$sequence <- seq(1:500)
+
+# Rename 0's to Died and 1's to Survived
+rf_err_model <- rename(rf_err_model, Died ="0", Survived ="1")
+
+# Convert data frame into long format
+rf_err_model <- melt(rf_err_model, id = "sequence")
+
+# Plot error rate
+ggplot(rf_err_model, aes(x = sequence, y = value, color = variable)) +
+  geom_line() +
+  scale_colour_manual(values = c("black", "red2", "forestgreen")) +
+  theme_classic() +
+  labs(title =  "Error rate in prediction", x = "Sequence", y = "Error rate")
+```
+
+여기서 우리는 우리의 전반적인 예측에 대한 오류율과 죽음과 생존에 대한 오류율을 별도로 볼 수 있다. 흥미롭게도, 우리는 생존보다 더 정확하게 죽음을 예측하고 있다.
+
+우리의 예측에서 각 변수의 중요성을 시각화하는 플롯을 만들자.
+
+```{r fig.height=5, fig.width=8, fig.align='center'}
+rf_imprtance <- varImp(rf_model)
+
+ggplot(rf_imprtance, aes(x = reorder(variable, importance), y = importance)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Importance of predictors", x = "Predictors", y = "Importance") +
+  theme_light()
+```
+
+
+#### 예측 : 랜덤 포레스트
+
+이제 랜덤 포레스트 모델을 만들었으니, test 데이터 세트에서 생존을 예측하는 데 사용할 것이다.
+
+테스트 셋을 사용하여 예측해보자.
+
+```{r}
+prediction_rf <- predict(rf_model, test)
+```
+
+solution_rf를  PeakerId 및 Surved라는 두 개의 데이터가 있는 데이터 프레임에 저장하자. 
+
+```{r}
+solution_rf <- data.frame(PassengerID = test$PassengerId, Survived = prediction_rf)
+```
+
+파일로 저장하자.
+
+```{r}
+write.csv(solution_rf, file = "rf_Titanic_Solution.csv", row.names = FALSE)
+```
+
+> <font size ="3"> **랜덤 포레스트 정확도 : 0.8288** </font>
+
+<br>
+
+## 로지스틱 회귀(Logistic Regression0
+
+로지스틱 회귀를 사용하여 분류를 시도해보자. 새 오브젝트를 10개 변수에 맞춰 생성하고, 이것을 train 모델에 사용할 것이다. 
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+```
+
+예측 모델을 train으로 만들고, 모델에 옵션 값을 지정해주자. 
+
+```{r}
+set.seed(222) # Set random seed
+
+lr_model <- train(factor(Survived) ~ ., 
+                      data = train,
+                      method = "glm",
+                      family = binomial(),
+                      trControl = fitControl) ; print(lr_model)
+```
+
+로지스틱 회귀 모형의 정확도를 확인해보자. 
+
+```{r}
+confusionMatrix(lr_model)
+```
+
+로지스틱 회귀 분석 모델에서 각 특성별로 중요성을 확인해보자. 
+
+```{r fig.height=5, fig.width=8, fig.align='center'}
+lr_importance <- varImp(lr_model)
+
+ggplot(lr_importance, aes(x = reorder(variable, importance), y = importance)) +
+  geom_bar(stat = "identity") +
+  labs(title = " Importance of predictors", x = "Predictors", y = "Importance") +
+  theme_light()
+```
+
+#### 예측: 로지스틱 회귀 
+
+테스트 셋을 사용하여 예측해보자
+
+```{r}
+prediction_lr <- predict(lr_model, test)
+```
+
+solution_lr 을 데이터 프레임 형식으로 저장하자. 
+
+```{r}
+solution_lr <- data.frame(PassengerID = test$PassengerId, Survived = prediction_lr)
+```
+
+solution_lr 을 파일로 만들자
+
+```{r}
+write.csv(solution_lr, file = "lr_Titanic_Solution.csv", row.names = FALSE)
+```
+
+
+> <font size ="3"> **로지스틱 회귀 정확도 : 0.8272** </font>
+
+<br>
+
+## 나이브 베이즈(Naive Bayes)
+
+이제 마지막 머신러닝 알고리즘인 **네이브 베이즈**를 사용해 보자.
+
+응답 변수인 "Survived*"가 없는 training 데이터 세트를 생성만들고,
+다음으로 생존 변수만 포함된 세트를 만들어보자.
+
+```{r}
+train_features <- full_data_final[1:891,-13]
+train_response <- full_data_final[1:891, 13]
+```
+
+Naive Bayes를 크로스 유효성 검사로 모델링.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+```
+
+train의 변수를 활용하여 모델 생성.
+
+```{r}
+set.seed(222) # Set random seed
+
+nb_model <- train(Survived ~., 
+                  data = train,
+                  method = "nb", 
+                  trControl = fitControl); print(nb_model)
+```
+
+모델의 정확도를 확인해자. 
+
+```{r}
+confusionMatrix(nb_model)
+```
+
+각 변수별로 나이브 베이즈 모델에서의 중요도를 확인해보자.
+
+```{r fig.height=5, fig.width=8, fig.align='center'}
+nb_importance <- varImp(nb_model)
+
+ggplot(nb_importance, aes(x= reorder(variable, importance), y = importance)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Importance of predictors", x = "Predictors", y = "Importance") +
+  theme_light()
+```
+
+#### 예측: 나이브 베이즈 
+
+생존률 예측에 있어, 생성한 나이브 베이즈 모델을 사용하여 test data set을 예측하지 않을 것이다. 
+
+test data로 예측을 할 것이다. 
+
+```{r }
+prediction_nb <- predict(nb_model, test)
+```
+
+solution_nb를 데이터 프레임 형식으로 저장하자. 
+
+```{r}
+solution_nb <- data.frame(PassengerID = test$PassengerId, Survived = prediction_nb)
+
+```
+
+파일로 저장하자.
+
+```{r}
+write.csv(solution_nb, file = 'nb_Titanic_Solution.csv', row.names = F)
+
+```
+
+> <font size ="3"> **나이브 베이즈 정확도 : 0.8025** </font>
+
+<br>
+
+
+# 결과 
+
+**결과 테이블:**
+
+| 분류기법          | 예측 정확도          |
+|:------------------|:---------------------|
+| 랜덤 포레스트     | 0.8272               |
+| 로지스틱 회귀     | 0.8272               |
+| 나이브 베이즈     | 0.8025               |
+
+<a style="display:scroll;position:fixed;bottom:10px;right:10px;" href="#" title="맨위로"><img
+src="https://addons-media.operacdn.com/media/extensions/95/180195/7.1.0-rev1/icons/icon_64x64_d8775c76175241b21a30008e4144b127.png"></a>
+
+<p align="center">
+<b>Kaggle 출처 :[Referenced Address](https://www.kaggle.com/tavoosi/predicting-survival-on-the-titanic-with-rf-lr-nb/report) </b><br>
+</p>
+
